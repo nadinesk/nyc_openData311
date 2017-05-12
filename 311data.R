@@ -1,153 +1,86 @@
+dev.copy(png, file = "members.png", width=800)  
+
 library(RCurl) 
-URL <- "https://data.cityofnewyork.us/api/views/erm2-nwe9/rows.csv" 
-x <- getURL(URL, ssl.verifyhost=FALSE, ssl.verifypeer=FALSE)
-
-
-#test <- read.csv("/Users/nadinekhattak/Downloads/311_Service_Requests_from_2010_to_Present (1).csv")
-test1 <- read.csv("/Users/nadinekhattak/Downloads/311_Service_Requests_from_2010_to_Present (2).csv")
-test2 <- read.csv("/Users/nadinekhattak/Downloads/311_Service_Requests_from_2010_to_Present.csv")
-table(test1$Created.Date)
-summary(test1$Created.Date)
-
-foo <- data.frame(do.call('rbind', strsplit(as.character(test1$Created.Date),' ',fixed=TRUE)))
-foo2 <- data.frame(do.call('rbind', strsplit(as.character(test2$Created.Date),' ',fixed=TRUE)))
-
-table(foo$X1)
-foo$X1 <- as.character(foo$X1)
-foo2$X1 <- as.character(foo2$X1)
-table(foo2$X1)
-table(foo$X1)
-str(foo2)
 library(dplyr)
-foo_filter <- foo %>%
-                filter(X1 == "01/01/2017")
+library(stringr)
+library(reshape)
+library(tidyr)
+library(ggplot2)
 
 
-foo_filter1 <- foo2 %>%
-  filter(X1 == "01/01/2017")
+setwd("/Users/nadinekhattak/Desktop/dev/nyc_openData311")
+
+## Read Files
+df2017ytd <- read.csv("/Users/nadinekhattak/Downloads/311_Service_Requests_from_2010_to_Present (2).csv")
+df2016 <- read.csv("/Users/nadinekhattak/Downloads/311_Service_Requests_from_2010_to_Present.csv")
 df2013 <- read.csv("/Users/nadinekhattak/Downloads/311_Service_Requests_from_2013.csv")
 df2014 <- read.csv("/Users/nadinekhattak/Downloads/311_Service_Requests_from_2014 2.csv")
 df2015 <- read.csv("/Users/nadinekhattak/Downloads/311_Service_Requests_from_2015.csv")
-df2016 <- test2
-df2017ytd <- test1
 
-table(df2016$Complaint.Type, df2016$Borough)
+# df2016 <- test2
+# df2017ytd <- test1
 
+## Combine Files
 df_comb <- rbind(df2014,df2015, df2016, df2017ytd)
 df_comb1 <-rbind(df_comb, df2013)
 
-names(df_comb)
-
-library(stringr)
-library(reshape)
-
-df_comb2$Created.Date <- str_split_fixed(df_comb1$Created.Date, "\\/", 2)
-
+## Split date column to month, day, year, time, and AM/PM
 df_comb1$month <- sapply(strsplit(as.character(df_comb1$Created.Date),'/'), "[", 1)
 df_comb1$day <- sapply(strsplit(as.character(df_comb1$Created.Date),'/'), "[", 2)
 df_comb1$year <- sapply(strsplit(as.character(df_comb1$Created.Date),'/'), "[", 3)
 
-df_comb1$year <- gsub(" ", "_", df_comb1$year)
-
-df_comb1$year <- sapply(strsplit(as.character(df_comb1$year),'_'), "[", 1)
 df_comb1$time <- sapply(strsplit(as.character(df_comb1$Created.Date),' '), "[", 1)
 df_comb1$am_pm <- sapply(strsplit(as.character(df_comb1$Created.Date),' '), "[", 2)
 df_comb1$am_pm1 <- sapply(strsplit(as.character(df_comb1$Created.Date),' '), "[", 3)
 
-
-str(df_comb1)
+## Get only columns needed
 
 names(df_comb1)
-
-head(df_comb1, n=20)
 
 df_comb2 <- df_comb1[c(1:9,17,19,25,54:57,59:60)]
 
 str(df_comb2)
 
+## Replace NA's to 0's
 df_comb2[is.na(df_comb2)] <- 0
 
+## Look at the number of each type of complaint per year
 year.comp_type <- as.data.frame(table(df_comb2$year, df_comb2$Complaint.Type))
 
 head(year.comp_type, n=50)
-library(tidyr)
+
+## Reshape from long to wide format
 year.comp_type.long <- spread(year.comp_type, Var1, Freq)
 
-
-head(year.comp_type.long, n=20)
-str(year.comp_type.long)
-
-
-
-
-
-
-head(year.comp_type.long1)
-str(year.comp_type.long1)
-
+## Get row sums (total for each complaint)
 
 year.comp_type.long1$sum <- rowSums(year.comp_type.long1[2:6])
 
+## Get percentage change of each complaint type, from 2013 to 2016
 year.comp_type.long1$perc.change <- ((year.comp_type.long1$`2016` - year.comp_type.long1$`2013`)/year.comp_type.long1$`2013`) * 100
 
-
+## Replace percentage changes of NaN with 0
 year.comp_type.long1$perc.change <- gsub("NaN", "0", year.comp_type.long1$perc.change)
+## Replace percentage changes of Inf with 1
 year.comp_type.long1$perc.change <- gsub("Inf", "1", year.comp_type.long1$perc.change)
 
-year.comp_type.long1 <- year.comp_type.long1 %>%
-  arrange(desc(`perc.change`))
+## Sort data descending by percentage change, and keep only the top five rows
+year.comp_type.long_top5_percChange <- year.comp_type.long1 %>%
+  arrange(desc(`perc.change`))%>%
+  slice(1:5) %>%
+  select(-`2017`, -sum)
 
-year.comp_type.long1
-
-# s1 <- df2017ytd %>%
-#         filter(Complaint.Type == "Homeless Person Assistance")
-# head(s1)
-# 
-# s2 <- df2017ytd %>%
-#   filter(Complaint.Type == "Posting Advertisement")
-# 
-# head(s2)
-# 
-# s3 <- df2016 %>%
-#   filter(Complaint.Type == "Literature Request")
-# 
-# head(s3)
-# 
-# s4 <- df2016 %>%
-#   filter(Complaint.Type == "PAINT/PLASTER")
-# 
-# head(s4)
-# 
-# s5 <- df2016 %>%
-#   filter(Complaint.Type == "DPR Internal")
-# 
-# head(s5)
-# 
-
-#5 largest % increase, 2013-2016
-#10 largest 2016
-#10 largest 2017 ytd
-
-# borough
-
-##top 5 
-
-year.comp_type.long_top5_percChange <-  year.comp_type.long1[1:5,]
-
-year.comp_type.long_top5_percChange
-
+## Reshape data from wide to long
 year.comp_type.long_top5_percChange.long <- melt(year.comp_type.long_top5_percChange)
 
-year.comp_type.long_top5_percChange.long
-
-library(ggplot2)
-
-
-
-perc_change <- ggplot(data=year.comp_type.long_top5_percChange.long, aes(x=variable, y=value, group= Var2, color= Var2)) +
+## Create bar chart showing change in complaint types over year, for complaint types with  five highest percentage changes 
+ggplot(data=year.comp_type.long_top5_percChange.long, aes(x=variable, y=value, group= Var2, color= Var2)) +
   geom_line() +
   geom_point()
 
+year.comp_type.long_top5_percChange.long
+
+## Get the ten most frequent complaint types for 2017 YTD
 year.comp_type.long1_arrange_total <- year.comp_type.long1 %>%
                                         arrange(desc(`2017`)) %>%
                                         slice(1:10) %>%
@@ -161,16 +94,19 @@ year.comp_type.long1_arrange_total.long <- melt(year.comp_type.long1_arrange_tot
 
 year.comp_type.long1_arrange_total.long
 
-top2017 <- ggplot(data=year.comp_type.long1_arrange_total.long, aes(x=variable, y=value, group= Var2, color= Var2)) +
+
+## Create bar chart showing change in complaint types over year, for most frequent complaint types in 2017 YTD 
+ggplot(data=year.comp_type.long1_arrange_total.long, aes(x=variable, y=value, group= Var2, color= Var2)) +
   geom_line() +
   geom_point()
 
-top2017
+year.comp_type.long1_arrange_total.long
 
+## Get the ten most frequent complaint types for 2017 YTD
 year.comp_type.long1_arrange_total_2016 <- year.comp_type.long1 %>%
             arrange(desc(`2016`)) %>%
             slice(1:10) %>%
-            select(-sum)
+            select(-`2017`,-sum)
 
 
 year.comp_type.long1_arrange_total_2016
@@ -180,25 +116,28 @@ year.comp_type.long1_arrange_total_2016.long <- melt(year.comp_type.long1_arrang
 
 year.comp_type.long1_arrange_total_2016.long
 
-top2016 <- ggplot(data=year.comp_type.long1_arrange_total_2016.long, aes(x=variable, y=value, group= Var2, color= Var2)) +
+## Create bar chart showing change in complaint types over year, for most frequent complaint types in 2016
+ggplot(data=year.comp_type.long1_arrange_total_2016.long, aes(x=variable, y=value, group= Var2, color= Var2)) +
   geom_line() +
   geom_point()
 
-top2016
+year.comp_type.long1_arrange_total_2016.long
 
-str(year.comp_type.long1_arrange_total_2016.long)
 
-table(year.comp_type.long1_arrange_total_2016.long$Var2)
+# Get frequency of each complaint type by borough
 
 b1 <- as.data.frame(table(df_comb2$Borough, df_comb2$Complaint.Type))
 b1
 
+## Group and Sum
 b2 <- b1 %>%
         group_by(Var1, Var2) %>%
         summarise(Frequency = sum(Freq))
 
 b3 <- b2 %>%
         arrange(Var1, desc(Frequency))
+
+## Get the Bronx's top five complaints, and add back in the number of those complaints for the other boroughs (the inner join)
 b3_bronx <- b3 %>%
               filter(Var1=="BRONX") %>%
               arrange(desc(Frequency)) %>%
@@ -207,70 +146,69 @@ b3_bronx <- b3 %>%
 
 b3_bronx
 
-table(b1$Var1)
-
+## Get Brooklyn's top five complaints, and add back in the number of those complaints for the other boroughs (the inner join)
 b3_brooklyn <- b3 %>%
   filter(Var1=="BROOKLYN") %>%
   arrange(desc(Frequency)) %>%
   slice(1:5) %>%
   inner_join(b2, by=c("Var2"))
 
-
+## Plot Brooklyn's top 5 complaints
+ggplot(data=b3_brooklyn, aes(x=Var2, y=Frequency.y, fill=Var1.y)) + 
+  geom_bar(stat="identity", position=position_dodge()) 
 
 b3_brooklyn
 
 
+
+## Get Manhattan's top five complaints, and add back in the number of those complaints for the other boroughs (the inner join)
 b3_manh <- b3 %>%
   filter(Var1=="MANHATTAN") %>%
   arrange(desc(Frequency)) %>%
   slice(1:5) %>%
   inner_join(b2, by=c("Var2"))
 
+## Plot Manhattan's top 5 complaints
+ggplot(data=b3_manh, aes(x=Var2, y=Frequency.y, fill=Var1.y)) + 
+  geom_bar(stat="identity", position=position_dodge()) 
 
 b3_manh
 
+## Get Queen's top five complaints, and add back in the number of those complaints for the other boroughs (the inner join)
 b3_queens <- b3 %>%
   filter(Var1=="QUEENS") %>%
   arrange(desc(Frequency)) %>%
   slice(1:5) %>%
   inner_join(b2, by=c("Var2"))
 
+## Plot Queen's top 5 complaints
+ggplot(data=b3_queens, aes(x=Var2, y=Frequency.y, fill=Var1.y)) + 
+  geom_bar(stat="identity", position=position_dodge()) 
 
 b3_queens
 
+## Get Staten Island's top five complaints, and add back in the number of those complaints for the other boroughs (the inner join)
 b3_si <- b3 %>%
   filter(Var1=="STATEN ISLAND") %>%
   arrange(desc(Frequency)) %>%
   slice(1:5) %>%
   inner_join(b2, by=c("Var2"))
 
+## Plot Staten Island's top 5 complaints
+ggplot(data=b3_si, aes(x=Var2, y=Frequency.y, fill=Var1.y)) + 
+  geom_bar(stat="identity", position=position_dodge()) 
 
 b3_si
 
+
+## Combine all top 5's together
 borough_top5 <- rbind(b3_bronx, b3_brooklyn, b3_manh, b3_queens, b3_si)
 
-head(b3_bronx)
+# borough_top5_1 <- borough_top5 %>%
+#   inner_join(b2, by=c("Var2"))
 
-bronx_comp <- ggplot(data=b3_bronx, aes(x=Var2, y=Frequency.y, fill=Var1.y)) + 
-  geom_bar(stat="identity", position=position_dodge()) 
-
-borough_top5_1 <- borough_top5 %>%
-                    inner_join(b2, by=c("Var2"))
-
-borough_top5_1
-
-brooklyn_comp <- ggplot(data=b3_brooklyn, aes(x=Var2, y=Frequency.y, fill=Var1.y)) + 
-  geom_bar(stat="identity", position=position_dodge()) 
-
-brooklyn_comp
-
-manh_comp <- ggplot(data=b3_manh, aes(x=Var2, y=Frequency.y, fill=Var1.y)) + 
-  geom_bar(stat="identity", position=position_dodge()) 
-
-manh_comp
-
-
-bor_comp <- ggplot(data=borough_top5_1, aes(x=Var2, y=Frequency.y, fill=Var1.y)) + 
+## Plot all boroughs' top 5 complaints
+ggplot(data=borough_top5_1, aes(x=Var2, y=Frequency.y, fill=Var1.y)) + 
   geom_bar(stat="identity", position=position_dodge()) + theme(axis.text.x = element_text(angle = 45, hjust = 1)) + facet_grid(Var1.y ~. )
 
 bor_comp
